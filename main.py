@@ -28,7 +28,7 @@ from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 import utils
 from feat_ext import load_audio_file, get_mel_spectrogram, modify_file_variable_length
 from data import get_label_files, DataGeneratorPatch, PatchGeneratorPerFile, DataGeneratorPatchOrigin
-from architectures import get_model_baseline
+from architectures import get_model_baseline, get_model_binary
 from eval import Evaluator
 from losses import lq_loss_wrap, crossentropy_max_wrap, crossentropy_outlier_wrap, crossentropy_reed_wrap,\
     crossentropy_max_origin_wrap, crossentropy_outlier_origin_wrap, lq_loss_origin_wrap, crossentropy_reed_origin_wrap
@@ -59,7 +59,7 @@ print('\nYaml file with parameters defining the experiment: %s\n' % str(args.par
 # =========================================================================Parameters, paths and variables
 
 # Read parameters file from yaml passed by argument
-params = yaml.load(open(args.params_yaml))
+params = yaml.load(open('config/params.yaml'))
 params_ctrl = params['ctrl']
 params_extract = params['extract']
 params_learn = params['learn']
