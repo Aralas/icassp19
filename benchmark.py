@@ -36,7 +36,7 @@ from losses import lq_loss_wrap, crossentropy_max_wrap, crossentropy_outlier_wra
     crossentropy_max_origin_wrap, crossentropy_outlier_origin_wrap, lq_loss_origin_wrap, crossentropy_reed_origin_wrap
 
 os.environ["HDF5_USE_FILE_LOCKING"] = 'FALSE'
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 start = time.time()
 
@@ -416,7 +416,7 @@ if not os.path.exists(model_path):
     os.makedirs(model_path)
 modelfile = os.path.join(model_path, 'lr_%.5f.h5' % params_learn.get('lr'))
 f = open(record_path+'benchmark_lr_%.5f.txt'%params_learn.get('lr'), 'a+')
-f.write('epoch, loss, training accuracy, test accuracy')
+f.write('epoch, loss, training accuracy, test accuracy \n')
 # ============================================================DEFINE AND FIT A MODEL
 # ============================================================DEFINE AND FIT A MODEL
 # ============================================================DEFINE AND FIT A MODEL

@@ -37,22 +37,7 @@ from eval import Evaluator
 from losses import lq_loss_wrap, crossentropy_max_wrap, crossentropy_outlier_wrap, crossentropy_reed_wrap,\
     crossentropy_max_origin_wrap, crossentropy_outlier_origin_wrap, lq_loss_origin_wrap, crossentropy_reed_origin_wrap
 
-
-target_label = 4
-positive_threshold = 0.9
-add_criterion = 9
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
 os.environ["HDF5_USE_FILE_LOCKING"] = 'FALSE'
-
-model_path = 'model/generate_clean_data/thres_%.2f_crit_%d/label%d/' % (positive_threshold, add_criterion, target_label)
-record_path = 'record/generate_clean_data/thres_%.2f_crit_%d/' % (positive_threshold, add_criterion)
-
-if not os.path.exists(model_path):
-    os.makedirs(model_path)
-
-if not os.path.exists(record_path):
-    os.makedirs(record_path)
 
 
 start = time.time()
@@ -189,123 +174,139 @@ int_to_label = {v: k for k, v in label_to_int.items()}
 file_to_int = {k: label_to_int[v] for k, v in file_to_label.items()}
 
 
-file_name = 'record/generate_clean_data/train.csv'
-train_csv_clean = pd.read_csv(file_name)
-binary_labels = np.array(train_csv_clean[str(target_label)])
-positive_list = np.where(binary_labels==1)[0]
-negative_list = np.where(binary_labels==0)[0]
+def main(target_label, positive_threshold, add_criterion):
 
+    model_path = 'model/generate_clean_data/thres_%.2f_crit_%d_lr_0.0001/label%d/' % (positive_threshold, add_criterion, target_label)
+    record_path = 'record/generate_clean_data/thres_%.2f_crit_%d_lr_0.0001/' % (positive_threshold, add_criterion)
 
-te_files = [f for f in os.listdir(params_path.get('featurepath_tr')) if f.endswith(suffix_in + '.data') and
-          os.path.isfile(os.path.join(params_path.get('featurepath_tr'), f.replace(suffix_in, suffix_out)))]
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
 
-for iteration in range(5):
-    # to store predictions
-    te_preds = np.empty((len(te_files), 10))
-    list_preds = []
-    model_list = []
-    for model_j in range(10):
-        print('iteration:%d,model:%d'%(iteration,model_j))
-        train_idx_neg = np.random.choice(negative_list, len(positive_list), replace=False)
-        train_idx = list(positive_list) + list(train_idx_neg)
-        ff_list_tr = [filelist_audio_tr[i].replace('.wav', suffix_in + '.data') for i in train_idx]
-        labels_audio_train = np.concatenate((np.ones((len(positive_list), 1), dtype=np.float32), np.zeros((len(positive_list), 1), dtype=np.float32)), axis=0)
+    if not os.path.exists(record_path):
+        os.makedirs(record_path)
 
-
-        # sanity check
-        print('Number of clips considered as train set: {0}'.format(len(ff_list_tr)))
-        print('Number of labels loaded for train set: {0}'.format(len(labels_audio_train)))
-
-        # split the val set randomly (but stratified) within the train set
-        tr_files, val_files = train_test_split(ff_list_tr,
-                                               stratify=labels_audio_train,
-                                               random_state=42
-                                               )
-
-        # to improve data generator
-        tr_gen_patch = DataGeneratorPatchBinary(labels=labels_audio_train,
-                                                feature_dir=params_path.get('featurepath_tr'),
-                                                file_list=ff_list_tr,
-                                                params_learn=params_learn,
-                                                params_extract=params_extract,
-                                                suffix_in='_mel',
-                                                suffix_out='_label',
-                                                floatx=np.float32
-                                                )
-
-
-        # ============================================================DEFINE AND FIT A MODEL
-        # ============================================================DEFINE AND FIT A MODEL
-        # ============================================================DEFINE AND FIT A MODEL
-
-        tr_loss, val_loss = [0] * params_learn.get('n_epochs'), [0] * params_learn.get('n_epochs')
-        # ============================================================
-        if params_ctrl.get('learn'):
-
-            model = get_model_binary(params_learn=params_learn, params_extract=params_extract)
-            if iteration > 0:
-                modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
-                model.load_weights(modelfile)
-
-            opt = Adam(lr=params_learn.get('lr'))
-            model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
-
-            # callbacks
-            hist = model.fit_generator(tr_gen_patch,
-                                       steps_per_epoch=tr_gen_patch.nb_iterations,
-                                       epochs=params_learn.get('n_epochs'),
-                                       class_weight=None,
-                                       workers=4,
-                                       verbose=2,
-                                       )
-            
-            modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
-            model.save_weights(modelfile)
-#             model_list.append(model)
-    
-    
-    # ==================================================================================================== PREDICT
-    # ==================================================================================================== PREDICT
-    # ==================================================================================================== PREDICT
-
-
-    te_gen_patch = PatchGeneratorPerFile(feature_dir=params_path.get('featurepath_tr'),
-                                 file_list=te_files,
-                                 params_extract=params_extract,
-                                 suffix_in='_mel',
-                                 floatx=np.float32,
-                                 scaler=tr_gen_patch.scaler
-                                 )
-    
-    for i in trange(len(te_files), miniters=int(len(te_files) / 100), ascii=True, desc="Predicting..."):
-        # return all patches for a sound file
-        patches_file = te_gen_patch.get_patches_file()
-        for model_j in range(10):
-            modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
-            model.load_weights(modelfile)
-            # predicting now on the T_F patch level (not on the wav clip-level)
-            preds_patch_list = model.predict(patches_file).tolist()
-            preds_patch = np.array(preds_patch_list)
-            preds_file = np.mean(preds_patch, axis=0)
-       
-            te_preds[i, model_j] = preds_file        
-                
-    K.clear_session()
-    tf.reset_default_graph()
-                
-    pos_pred_valid = np.sum(te_preds >= positive_threshold, axis=1)
-    add_index = np.where(pos_pred_valid >= add_criterion)[0]
-    
-    file_name = record_path + '/iteration%d.csv'%iteration
-    if not os.path.exists(file_name):        
-        train_csv_clean = pd.read_csv('record/generate_clean_data/train.csv')
-    else:
-        train_csv_clean = pd.read_csv(file_name)
+    file_name = 'record/generate_clean_data/train.csv'
+    train_csv_clean = pd.read_csv(file_name)
     binary_labels = np.array(train_csv_clean[str(target_label)])
-    binary_labels[add_index] = 1
-    train_csv_clean[str(target_label)] = binary_labels
-    train_csv_clean.to_csv(file_name, index=False)
     positive_list = np.where(binary_labels==1)[0]
     negative_list = np.where(binary_labels==0)[0]
-    
-    
+
+
+    te_files = [f for f in os.listdir(params_path.get('featurepath_tr')) if f.endswith(suffix_in + '.data') and
+              os.path.isfile(os.path.join(params_path.get('featurepath_tr'), f.replace(suffix_in, suffix_out)))]
+
+    for iteration in range(5):
+        # to store predictions
+        te_preds = np.empty((len(te_files), 10))
+        list_preds = []
+        model_list = []
+        for model_j in range(10):
+            print('iteration:%d,model:%d'%(iteration,model_j))
+            train_idx_neg = np.random.choice(negative_list, len(positive_list), replace=False)
+            train_idx = list(positive_list) + list(train_idx_neg)
+            ff_list_tr = [filelist_audio_tr[i].replace('.wav', suffix_in + '.data') for i in train_idx]
+            labels_audio_train = np.concatenate((np.ones((len(positive_list), 1), dtype=np.float32), np.zeros((len(positive_list), 1), dtype=np.float32)), axis=0)
+
+
+            # sanity check
+            print('Number of clips considered as train set: {0}'.format(len(ff_list_tr)))
+            print('Number of labels loaded for train set: {0}'.format(len(labels_audio_train)))
+
+            # split the val set randomly (but stratified) within the train set
+            tr_files, val_files = train_test_split(ff_list_tr,
+                                                   stratify=labels_audio_train,
+                                                   random_state=42
+                                                   )
+
+            # to improve data generator
+            tr_gen_patch = DataGeneratorPatchBinary(labels=labels_audio_train,
+                                                    feature_dir=params_path.get('featurepath_tr'),
+                                                    file_list=ff_list_tr,
+                                                    params_learn=params_learn,
+                                                    params_extract=params_extract,
+                                                    suffix_in='_mel',
+                                                    suffix_out='_label',
+                                                    floatx=np.float32
+                                                    )
+
+
+            # ============================================================DEFINE AND FIT A MODEL
+            # ============================================================DEFINE AND FIT A MODEL
+            # ============================================================DEFINE AND FIT A MODEL
+
+            tr_loss, val_loss = [0] * params_learn.get('n_epochs'), [0] * params_learn.get('n_epochs')
+            # ============================================================
+            if params_ctrl.get('learn'):
+
+                model = get_model_binary(params_learn=params_learn, params_extract=params_extract)
+                if iteration > 0:
+                    modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
+                    model.load_weights(modelfile)
+
+                opt = Adam(lr=0.0001)
+                model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
+
+                # callbacks
+                hist = model.fit_generator(tr_gen_patch,
+                                           steps_per_epoch=tr_gen_patch.nb_iterations,
+                                           epochs=20,
+                                           class_weight=None,
+                                           workers=4,
+                                           verbose=2,
+                                           )
+
+                modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
+                model.save_weights(modelfile)
+    #             model_list.append(model)
+
+
+        # ==================================================================================================== PREDICT
+        # ==================================================================================================== PREDICT
+        # ==================================================================================================== PREDICT
+
+
+        te_gen_patch = PatchGeneratorPerFile(feature_dir=params_path.get('featurepath_tr'),
+                                     file_list=te_files,
+                                     params_extract=params_extract,
+                                     suffix_in='_mel',
+                                     floatx=np.float32,
+                                     scaler=tr_gen_patch.scaler
+                                     )
+
+        for i in trange(len(te_files), miniters=int(len(te_files) / 100), ascii=True, desc="Predicting..."):
+            # return all patches for a sound file
+            patches_file = te_gen_patch.get_patches_file()
+            for model_j in range(10):
+                modelfile = os.path.join(model_path, 'model%d.h5' % model_j)
+                model.load_weights(modelfile)
+                # predicting now on the T_F patch level (not on the wav clip-level)
+                preds_patch_list = model.predict(patches_file).tolist()
+                preds_patch = np.array(preds_patch_list)
+                preds_file = np.mean(preds_patch, axis=0)
+
+                te_preds[i, model_j] = preds_file        
+
+        K.clear_session()
+        tf.reset_default_graph()
+
+        pos_pred_valid = np.sum(te_preds >= positive_threshold, axis=1)
+        add_index = np.where(pos_pred_valid >= add_criterion)[0]
+
+        file_name = record_path + '/iteration%d.csv'%iteration
+        if not os.path.exists(file_name):        
+            train_csv_clean = pd.read_csv('record/generate_clean_data/train.csv')
+        else:
+            train_csv_clean = pd.read_csv(file_name)
+        binary_labels = np.array(train_csv_clean[str(target_label)])
+        binary_labels[add_index] = 1
+        train_csv_clean[str(target_label)] = binary_labels
+        train_csv_clean.to_csv(file_name, index=False)
+        positive_list = np.where(binary_labels==1)[0]
+        negative_list = np.where(binary_labels==0)[0]
+
+positive_threshold = 0.95
+add_criterion = 9
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+
+for target_label in range(10, 14):
+    main(target_label, positive_threshold, add_criterion)

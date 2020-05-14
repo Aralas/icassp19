@@ -401,7 +401,7 @@ if not os.path.exists(model_path):
     os.makedirs(model_path)
 modelfile = os.path.join(model_path, 'lr_%.5f.h5' % params_learn.get('lr'))
 f = open(record_path+'teacher_lr_%.5f.txt'%params_learn.get('lr'), 'a+')
-f.write('epoch, loss, training accuracy, test accuracy')
+f.write('epoch, loss, training accuracy, test accuracy \n')
 # ============================================================DEFINE AND FIT A MODEL
 # ============================================================DEFINE AND FIT A MODEL
 # ============================================================DEFINE AND FIT A MODEL
